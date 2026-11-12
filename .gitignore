@@ -1,0 +1,11 @@
+# Python virtual environment
+.venv/
+venv/
+
+# DuckDB database files
+*.duckdb
+*.duckdb.wal
+
+# Python cache
+__pycache__/
+*.py[cod]

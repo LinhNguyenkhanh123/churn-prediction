@@ -271,3 +271,82 @@ FROM staging.stg_finance_monthly_labeled
 GROUP BY 1
 ORDER BY 1;
 
+--4. Create staging table for GMV base month data
+CREATE TABLE staging.stg_gmv_base_month AS
+
+SELECT
+    -- Original values
+    tenant_id AS tenant_id_raw,
+    order_month AS order_month_raw,
+    shop_currency_code AS shop_currency_code_raw,
+    total_gmv AS total_gmv_raw,
+
+    -- Standardized values
+    LOWER(TRIM(tenant_id)) AS tenant_key,
+
+    TRY_CAST(
+        TRIM(order_month) || '-01' AS DATE
+    ) AS order_month,
+
+    UPPER(TRIM(shop_currency_code)) AS currency_code,
+
+    TRY_CAST(
+        TRIM(total_gmv) AS DECIMAL(38,19)
+    ) AS total_gmv,
+
+    -- Data quality flags
+    CASE
+        WHEN tenant_id IS NULL OR TRIM(tenant_id) = ''
+        THEN 1 ELSE 0
+    END AS invalid_tenant_flag,
+
+    CASE
+        WHEN TRY_CAST(TRIM(order_month) || '-01' AS DATE) IS NULL
+        THEN 1 ELSE 0
+    END AS invalid_order_month_flag,
+
+    CASE
+        WHEN shop_currency_code IS NULL
+          OR TRIM(shop_currency_code) = ''
+        THEN 1 ELSE 0
+    END AS invalid_currency_flag,
+
+    CASE
+        WHEN TRY_CAST(
+            TRIM(total_gmv) AS DECIMAL(38,19)
+        ) IS NULL
+        THEN 1 ELSE 0
+    END AS invalid_gmv_flag,
+
+    CASE
+        WHEN TRY_CAST(
+            TRIM(total_gmv) AS DECIMAL(38,19)
+        ) = 0
+        THEN 1 ELSE 0
+    END AS zero_gmv_flag
+
+FROM raw.gmv_base_month;
+
+-- Quality check for staging.stg_gmv_base_month
+SELECT
+    COUNT(*) AS total_rows,
+    COUNT(DISTINCT tenant_key) AS distinct_tenants,
+    COUNT(DISTINCT order_month) AS distinct_months,
+    COUNT(DISTINCT currency_code) AS distinct_currencies,
+    COUNT(*) FILTER (
+        WHERE invalid_tenant_flag = 1
+    ) AS invalid_tenants,
+    COUNT(*) FILTER (
+        WHERE invalid_order_month_flag = 1
+    ) AS invalid_dates,
+    COUNT(*) FILTER (
+        WHERE invalid_currency_flag = 1
+    ) AS invalid_currencies,
+    COUNT(*) FILTER (
+        WHERE invalid_gmv_flag = 1
+    ) AS invalid_gmv,
+    COUNT(*) FILTER (
+        WHERE zero_gmv_flag = 1
+    ) AS zero_gmv
+
+FROM staging.stg_gmv_base_month;
