@@ -65,6 +65,7 @@ Coverage declines over time, particularly for Search in September. Missing month
 | Extreme GMV and Search sales | Preserve source values and flag potential outliers; no automatic deletion or capping. |
 | Search funnel inconsistencies | Do not enforce unverified metric relationships. |
 | Missing monthly GMV/Search records | Distinguish absent activity records from NULL values in existing records. |
+| September Search anomaly - Total searches decreases by 96.75% on common cohort | Potential source-level completeness or measurement anomaly -> Preserve records; flag September data for investigation |
 
 ## 5. Decisions for Downstream Modeling
 
