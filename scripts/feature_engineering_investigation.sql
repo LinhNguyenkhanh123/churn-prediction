@@ -997,3 +997,128 @@ ORDER BY
     snapshot_month,
     has_gmv_data,
     has_search_data;
+
+--7. Create a training set
+CREATE TABLE staging.churn_training_set AS
+
+WITH finance_features AS (
+    SELECT
+        shop_key,
+        snapshot_month,
+        snapshot_date,
+
+        -- Finance features
+        tenure_months,
+        bom_mrr,
+        eom_mrr,
+
+        eom_mrr - bom_mrr AS mrr_change,
+
+        CASE
+            WHEN bom_mrr > 0
+            THEN (eom_mrr - bom_mrr) / bom_mrr
+            ELSE NULL
+        END AS mrr_growth_rate,
+
+        -- Search 30d features
+        has_search_data,
+        total_searches AS searches_30d,
+        total_product_click AS product_clicks_30d,
+        total_search_click AS search_clicks_30d,
+        total_add_carts AS add_carts_30d,
+        total_orders AS orders_30d,
+
+        -- Target
+        churn_label,
+
+        CASE
+            WHEN snapshot_month IN (
+                DATE '2026-06-01',
+                DATE '2026-07-01'
+            ) THEN 'train'
+            WHEN snapshot_month = DATE '2026-08-01'
+            THEN 'test'
+        END AS data_split
+
+    FROM mart.fact_merchant_monthly
+    WHERE snapshot_month BETWEEN DATE '2026-06-01'
+                             AND DATE '2026-08-01'
+      AND eom_mrr > 0
+      AND churn_mrr = 0
+      AND churn_label IS NOT NULL
+)
+
+SELECT
+    f.*,
+    -- GMV features
+    g.gmv_30d,
+    g.gmv_currency_code,
+    g.has_gmv_data,
+    g.multi_currency_flag,
+    g.gmv_60d,
+    g.gmv_growth_30d,
+    g.gmv_growth_60d,
+
+    -- Search 60d volume
+    s.searches_60d,
+    s.product_clicks_60d,
+    s.search_clicks_60d,
+    s.add_carts_60d,
+    s.orders_60d,
+
+    -- Search growth 30d
+    s.searches_growth_30d,
+    s.product_clicks_growth_30d,
+    s.search_clicks_growth_30d,
+    s.add_carts_growth_30d,
+    s.orders_growth_30d,
+
+    -- Search growth 60d
+    s.searches_growth_60d,
+    s.product_clicks_growth_60d,
+    s.search_clicks_growth_60d,
+    s.add_carts_growth_60d,
+    s.orders_growth_60d,
+
+    -- Search conversion rates 30d
+    s.search_to_product_click_rate_30d,
+    s.search_click_rate_30d,
+    s.product_click_to_cart_rate_30d,
+    s.cart_to_order_rate_30d,
+
+    -- Search conversion rates 60d
+    s.search_to_product_click_rate_60d,
+    s.search_click_rate_60d,
+    s.product_click_to_cart_rate_60d,
+    s.cart_to_order_rate_60d
+
+FROM finance_features f
+
+LEFT JOIN staging.stg_gmv_features g
+    ON f.shop_key = g.shop_key
+   AND f.snapshot_month = g.snapshot_month
+
+LEFT JOIN staging.stg_search_features s
+    ON f.shop_key = s.shop_key
+   AND f.snapshot_month = s.snapshot_month;
+
+-- Check for missing values in the training set
+SELECT
+    COUNT(*) AS total_rows,
+    COUNT(*) FILTER (WHERE tenure_months IS NULL) AS missing_tenure,
+    COUNT(*) FILTER (WHERE bom_mrr IS NULL) AS missing_bom_mrr,
+    COUNT(*) FILTER (WHERE eom_mrr IS NULL) AS missing_eom_mrr,
+    COUNT(*) FILTER (WHERE mrr_change IS NULL) AS missing_mrr_change,
+    COUNT(*) FILTER (WHERE mrr_growth_rate IS NULL) AS missing_mrr_growth,
+    COUNT(*) FILTER (WHERE gmv_30d IS NULL) AS missing_gmv_30d,
+    COUNT(*) FILTER (WHERE gmv_60d IS NULL) AS missing_gmv_60d,
+    COUNT(*) FILTER (WHERE gmv_growth_30d IS NULL) AS missing_gmv_growth_30d,
+    COUNT(*) FILTER (WHERE gmv_growth_60d IS NULL) AS missing_gmv_growth_60d,
+    COUNT(*) FILTER (WHERE has_search_data = 0) AS missing_search_data,
+    COUNT(*) FILTER (WHERE searches_60d IS NULL) AS missing_searches_60d,
+    COUNT(*) FILTER (WHERE searches_growth_30d IS NULL) AS missing_searches_growth_30d,
+    COUNT(*) FILTER (WHERE searches_growth_60d IS NULL) AS missing_searches_growth_60d,
+    COUNT(*) FILTER (WHERE search_to_product_click_rate_30d IS NULL) AS missing_search_conversion_30d,
+    COUNT(*) FILTER (WHERE search_to_product_click_rate_60d IS NULL) AS missing_search_conversion_60d
+
+FROM staging.churn_training_set;
