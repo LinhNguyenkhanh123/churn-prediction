@@ -203,3 +203,36 @@ SELECT
     COUNT(*) FILTER (WHERE cart_to_order_rate_60d IS NULL) AS cart_to_order_rate_60d_null
 
 FROM mart.churn_training_set;
+
+--5. Check the distribution of finance features
+SELECT
+    COUNT(*) AS total_rows,
+    COUNT(*) FILTER (WHERE tenure_months IS NULL) AS tenure_null,
+    COUNT(*) FILTER (WHERE bom_mrr IS NULL) AS bom_mrr_null,
+    COUNT(*) FILTER (WHERE eom_mrr IS NULL) AS eom_mrr_null,
+    COUNT(*) FILTER (WHERE mrr_change IS NULL) AS mrr_change_null,
+    COUNT(*) FILTER (WHERE mrr_growth_rate IS NULL) AS mrr_growth_rate_null,
+    COUNT(*) FILTER (WHERE mrr_movement_type IS NULL) AS mrr_movement_type_null,
+    COUNT(*) FILTER (WHERE has_gmv_data IS NULL) AS has_gmv_data_null,
+    COUNT(*) FILTER (WHERE multi_currency_flag IS NULL) AS multi_currency_flag_null,
+    COUNT(*) FILTER (WHERE has_search_data IS NULL) AS has_search_data_null
+
+FROM mart.churn_training_set;
+
+--6. Check the distribution of churn labels by MRR movement type
+SELECT
+    mrr_movement_type,
+    COUNT(*) AS row_count,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS percentage,
+    COUNT(*) FILTER (
+        WHERE churn_next_30d = 1
+    ) AS churn_count,
+    ROUND(
+        100.0 * COUNT(*) FILTER (
+            WHERE churn_next_30d = 1
+        ) / COUNT(*),
+        2
+    ) AS churn_rate_pct
+FROM mart.churn_training_set
+GROUP BY mrr_movement_type
+ORDER BY row_count DESC;
