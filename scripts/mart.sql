@@ -167,3 +167,13 @@ SELECT
 FROM mart.fact_merchant_monthly
 GROUP BY snapshot_month
 ORDER BY snapshot_month;
+
+-- Create mart.fact_merchant_monthly_gmv_currency
+CREATE TABLE mart.fact_merchant_monthly_gmv_currency AS
+SELECT
+    tenant_key,
+    order_month AS snapshot_month,
+    currency_code,
+    total_gmv,
+    zero_gmv_flag
+FROM staging.stg_gmv_base_month;

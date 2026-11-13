@@ -136,22 +136,23 @@ SELECT
 FROM staging.stg_finance_cube_data;
 
 -- Quality check for consecutive snapshots and MRR matching
-
 WITH finance_next AS (
     SELECT
         shop_key,
         snapshot_date,
         eom_mrr,
-
         LEAD(snapshot_date) OVER (
             PARTITION BY shop_key
             ORDER BY snapshot_date
         ) AS next_snapshot_date,
-
         LEAD(bom_mrr) OVER (
             PARTITION BY shop_key
             ORDER BY snapshot_date
-        ) AS next_bom_mrr
+        ) AS next_bom_mrr,
+        LEAD(eom_mrr) OVER (
+            PARTITION BY shop_key
+            ORDER BY snapshot_date
+        ) AS next_eom_mrr
 
     FROM staging.stg_finance_cube_data
 )
@@ -212,35 +213,34 @@ CREATE TABLE staging.stg_finance_monthly_labeled AS
 WITH finance_next AS (
     SELECT
         *,
-
         LEAD(snapshot_date) OVER (
             PARTITION BY shop_key
             ORDER BY snapshot_date
         ) AS next_snapshot_date,
-
         LEAD(churn_mrr) OVER (
             PARTITION BY shop_key
             ORDER BY snapshot_date
-        ) AS next_churn_mrr
+        ) AS next_churn_mrr,
+        LEAD(eom_mrr) OVER (
+            PARTITION BY shop_key
+            ORDER BY snapshot_date
+        ) AS next_eom_mrr
 
     FROM staging.stg_finance_cube_data
 )
 
 SELECT
     *,
-
     CASE
         WHEN eom_mrr <= 0 THEN NULL
-
         WHEN next_snapshot_date IS NULL THEN NULL
 
         WHEN DATE_TRUNC('month', next_snapshot_date)
-             <> DATE_TRUNC('month', snapshot_date)
+            <> DATE_TRUNC('month', snapshot_date)
                 + INTERVAL '1 month' THEN NULL
 
-        WHEN next_churn_mrr < 0 THEN 1
-
-        WHEN next_churn_mrr = 0 THEN 0
+        WHEN next_eom_mrr = 0 THEN 1
+        WHEN next_eom_mrr > 0 THEN 0
 
         ELSE NULL
     END AS churn_label
@@ -743,12 +743,45 @@ FROM staging.stg_finance_monthly_labeled
 GROUP BY 1
 ORDER BY 1;
 
---8. Create mart.fact_merchant_monthly_gmv_currency
-CREATE TABLE mart.fact_merchant_monthly_gmv_currency AS
+--8. Create a consolidated view of monthly features for modeling
+CREATE TABLE staging.stg_gmv_merchant_monthly AS
+WITH currency_summary AS (
+    SELECT
+        tenant_key,
+        order_month,
+        COUNT(DISTINCT currency_code) AS currency_count,
+        MIN(currency_code) AS single_currency_code,
+        SUM(total_gmv) AS gmv_sum
+    FROM staging.stg_gmv_base_month
+    WHERE tenant_key IS NOT NULL
+      AND order_month IS NOT NULL
+      AND currency_code IS NOT NULL
+      AND total_gmv IS NOT NULL
+    GROUP BY
+        tenant_key,
+        order_month
+)
 SELECT
     tenant_key,
-    order_month AS snapshot_month,
-    currency_code,
-    total_gmv,
-    zero_gmv_flag
-FROM staging.stg_gmv_base_month;
+    order_month,
+
+    CASE
+        WHEN currency_count = 1 THEN single_currency_code
+        ELSE NULL
+    END AS currency_code,
+
+    CASE
+        WHEN currency_count = 1 THEN gmv_sum
+        ELSE NULL
+    END AS total_gmv,
+
+    currency_count,
+
+    CASE
+        WHEN currency_count > 1 THEN 1
+        ELSE 0
+    END AS multi_currency_flag,
+
+    1 AS has_gmv_data
+
+FROM currency_summary;
