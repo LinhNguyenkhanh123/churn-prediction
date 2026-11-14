@@ -19,7 +19,7 @@ This project develops a machine learning pipeline to predict whether an **active
 The project follows a reproducible workflow, from raw data preparation to merchant-level churn scoring.
 
 ```mermaid
-flowchart TD
+flowchart LR
     A["Raw Data<br/>Finance, GMV, Search Traffic, Plan Information"] 
     --> B["Data Preparation<br/>DuckDB · Raw → Staging → Mart"]
     B --> C["Feature Engineering<br/>Merchant-level Monthly Features"]
